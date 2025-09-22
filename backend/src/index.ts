@@ -247,10 +247,14 @@ app.post('/v1/clipboard', async (c) => {
 
     clipboardItems.set(id, item)
 
+    const frontendUrl = process.env.BASE_URL
+      ? process.env.BASE_URL.replace('/api', '')
+      : 'http://localhost:5173'
+
     return c.json({
       success: true,
       id,
-      url: `${process.env.BASE_URL || 'http://localhost:19234'}/v1/clipboard/${id}`
+      url: `${frontendUrl}/c/${id}`
     })
   } catch (error) {
     console.error('Clipboard create error:', error)

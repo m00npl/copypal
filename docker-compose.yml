@@ -1,8 +1,6 @@
 services:
   copypal-backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: moonplkr/copypal-backend:latest
     ports:
       - "19234:19234"
     environment:
