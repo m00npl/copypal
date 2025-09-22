@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 214 25% 5%;
+    --foreground: 214 12% 90%;
+    --card: 214 25% 10%;
+    --card-foreground: 214 12% 90%;
+    --popover: 214 25% 10%;
+    --popover-foreground: 214 12% 90%;
+    --primary: 142 76% 44%;
+    --primary-foreground: 214 12% 90%;
+    --secondary: 214 19% 20%;
+    --secondary-foreground: 214 12% 90%;
+    --muted: 214 19% 20%;
+    --muted-foreground: 214 12% 70%;
+    --accent: 214 19% 20%;
+    --accent-foreground: 214 12% 90%;
+    --destructive: 0 62% 63%;
+    --destructive-foreground: 214 12% 90%;
+    --border: 214 19% 20%;
+    --input: 214 19% 20%;
+    --ring: 142 76% 44%;
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/* Custom scrollbar for dark theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #131A26;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #273244;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Focus visible improvements */
+.focus-visible\:ring-2:focus-visible {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px #20C15A;
+}

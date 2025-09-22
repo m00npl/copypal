@@ -1,0 +1,34 @@
+services:
+  copypal-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "19234:19234"
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - PORT=${PORT:-19234}
+      - GOLEM_RPC_URL=${GOLEM_RPC_URL}
+      - GOLEM_WS_URL=${GOLEM_WS_URL}
+      - GOLEM_CHAIN_ID=${GOLEM_CHAIN_ID}
+      - GOLEM_PRIVATE_KEY=${GOLEM_PRIVATE_KEY}
+      - BASE_URL=${BASE_URL}
+      - SENDGRID_API_KEY=${SENDGRID_API_KEY}
+      - FROM_EMAIL=${FROM_EMAIL}
+    networks:
+      - moon_golem_network
+
+  copypal-frontend:
+    image: moonplkr/copypal-new-frontend:latest
+    ports:
+      - "8881:80"
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+    depends_on:
+      - copypal-backend
+    networks:
+      - moon_golem_network
+
+networks:
+  moon_golem_network:
+    external: true

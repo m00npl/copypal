@@ -1,0 +1,81 @@
+/* Custom calendar styles to ensure proper grid layout */
+.calendar-custom .rdp {
+  --rdp-cell-size: 36px;
+  margin: 0;
+}
+
+.calendar-custom .rdp-months {
+  display: flex;
+  flex-direction: column;
+}
+
+.calendar-custom .rdp-month {
+  margin: 0;
+}
+
+.calendar-custom .rdp-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.calendar-custom .rdp-head_row,
+.calendar-custom .rdp-row {
+  display: flex;
+  width: 100%;
+}
+
+.calendar-custom .rdp-head_cell,
+.calendar-custom .rdp-cell {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--rdp-cell-size);
+  height: var(--rdp-cell-size);
+}
+
+.calendar-custom .rdp-day {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.calendar-custom .rdp-day:hover {
+  background-color: #273244;
+  transform: scale(1.05);
+}
+
+.calendar-custom .rdp-day_selected {
+  background: linear-gradient(to bottom right, #20C15A, #1ca549);
+  color: #0B0F1A;
+  font-weight: 600;
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+}
+
+.calendar-custom .rdp-day_today {
+  background-color: #273244;
+  border: 1px solid #20C15A;
+  color: #E6EAF2;
+  font-weight: 600;
+}
+
+.calendar-custom .rdp-day_outside {
+  color: #5A6B7F;
+  opacity: 0.5;
+}
+
+.calendar-custom .rdp-day_disabled {
+  color: #5A6B7F;
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.calendar-custom .rdp-day_disabled:hover {
+  background: transparent;
+  transform: none;
+}
