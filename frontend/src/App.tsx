@@ -96,15 +96,42 @@ export default function App() {
         headers['Authorization'] = `Bearer ${auth.sessionId}`
       }
 
-      const payload = {
-        kind: data.file ? 'file' : 'text',
-        content: data.content || `File: ${data.file?.name}`,
+      let payload: any = {
         expiresAt: data.expiresAt.toISOString(),
         pow: {
           nonce: pow.nonce,
           salt: Array.from(pow.salt),
           digest: pow.digest,
           difficulty: pow.difficulty
+        }
+      }
+
+      if (data.file) {
+        // Convert file to base64
+        const fileData = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => {
+            const result = reader.result as string
+            resolve(result.split(',')[1]) // Remove data:... prefix
+          }
+          reader.onerror = reject
+          reader.readAsDataURL(data.file!)
+        })
+
+        payload = {
+          ...payload,
+          kind: 'file',
+          content: `File: ${data.file.name}`,
+          fileName: data.file.name,
+          fileType: data.file.type,
+          fileSize: data.file.size,
+          fileData: fileData
+        }
+      } else {
+        payload = {
+          ...payload,
+          kind: 'text',
+          content: data.content || ''
         }
       }
 

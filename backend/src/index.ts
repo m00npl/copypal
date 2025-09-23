@@ -82,7 +82,12 @@ interface UserSession {
 
 interface ClipboardItem {
   id: string
+  kind: 'text' | 'file'
   content: string
+  fileName?: string
+  fileType?: string
+  fileSize?: number
+  fileData?: string // Base64 encoded file data
   userId?: string
   createdAt: number
   expiresAt: number
@@ -103,7 +108,13 @@ const verifyMagicLinkSchema = z.object({
 })
 
 const clipboardSchema = z.object({
-  content: z.string().min(1).max(10000)
+  kind: z.enum(['text', 'file']).default('text'),
+  content: z.string().min(1).max(10000),
+  fileName: z.string().optional(),
+  fileType: z.string().optional(),
+  fileSize: z.number().optional(),
+  fileData: z.string().optional(), // Base64 encoded file data
+  expiresAt: z.string().datetime().optional()
 })
 
 // Health endpoint
@@ -228,18 +239,30 @@ app.post('/v1/auth/logout', async (c) => {
 app.post('/v1/clipboard', async (c) => {
   try {
     const body = await c.req.json()
-    const { content } = clipboardSchema.parse(body)
+    const { kind, content, fileName, fileType, fileSize, fileData, expiresAt: expiresAtStr } = clipboardSchema.parse(body)
 
     const sessionId = c.req.header('Authorization')?.replace('Bearer ', '')
     const userSession = sessionId ? userSessions.get(sessionId) : null
 
     // Generate unique ID
     const id = nanoid()
-    const expiresAt = Date.now() + (24 * 60 * 60 * 1000) // 24 hours
+
+    // Parse expiration date or default to 24 hours
+    let expiresAt: number
+    if (expiresAtStr) {
+      expiresAt = new Date(expiresAtStr).getTime()
+    } else {
+      expiresAt = Date.now() + (24 * 60 * 60 * 1000) // 24 hours
+    }
 
     const item: ClipboardItem = {
       id,
+      kind,
       content,
+      fileName,
+      fileType,
+      fileSize,
+      fileData,
       userId: userSession?.id,
       createdAt: Date.now(),
       expiresAt
@@ -280,10 +303,49 @@ app.get('/v1/clipboard/:id', async (c) => {
 
   return c.json({
     success: true,
+    kind: item.kind,
     content: item.content,
+    fileName: item.fileName,
+    fileType: item.fileType,
+    fileSize: item.fileSize,
+    fileData: item.fileData,
     createdAt: item.createdAt,
     expiresAt: item.expiresAt
   })
+})
+
+// File download endpoint
+app.get('/v1/clipboard/:id/download', async (c) => {
+  const id = c.req.param('id')
+  const item = clipboardItems.get(id)
+
+  if (!item) {
+    return c.json({ error: 'Item not found', success: false }, 404)
+  }
+
+  if (Date.now() > item.expiresAt) {
+    clipboardItems.delete(id)
+    return c.json({ error: 'Item expired', success: false }, 410)
+  }
+
+  if (item.kind !== 'file' || !item.fileData || !item.fileName) {
+    return c.json({ error: 'Not a file or file data missing', success: false }, 400)
+  }
+
+  try {
+    // Decode base64 file data
+    const fileBuffer = Buffer.from(item.fileData, 'base64')
+
+    // Set appropriate headers
+    c.header('Content-Type', item.fileType || 'application/octet-stream')
+    c.header('Content-Disposition', `attachment; filename="${item.fileName}"`)
+    c.header('Content-Length', fileBuffer.length.toString())
+
+    return c.body(fileBuffer)
+  } catch (error) {
+    console.error('File download error:', error)
+    return c.json({ error: 'Failed to download file', success: false }, 500)
+  }
 })
 
 const port = parseInt(process.env.PORT || '19234')

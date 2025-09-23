@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Card, CardHeader, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Copy, ArrowLeft, Clock, AlertCircle } from "lucide-react"
+import { Copy, ArrowLeft, Clock, AlertCircle, Download, Image, File } from "lucide-react"
 import { format } from "date-fns"
 
 const API_BASE = import.meta.env.MODE === 'production'
@@ -12,7 +12,12 @@ const API_BASE = import.meta.env.MODE === 'production'
 
 interface ClipboardItem {
   success: boolean
+  kind: 'text' | 'file'
   content: string
+  fileName?: string
+  fileType?: string
+  fileSize?: number
+  fileData?: string
   createdAt: number
   expiresAt: number
   error?: string
@@ -68,6 +73,42 @@ export function ClipboardView() {
   const timeRemaining = item ? item.expiresAt - Date.now() : 0
   const isExpired = timeRemaining <= 0
   const expiresDate = item ? new Date(item.expiresAt) : null
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes'
+    const k = 1024
+    const sizes = ['Bytes', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  }
+
+  const downloadFile = () => {
+    if (!item?.fileName || !item?.fileData) return
+
+    try {
+      // Create download URL
+      const downloadUrl = `${API_BASE}/v1/clipboard/${id}/download`
+
+      // Create temporary link and trigger download
+      const link = document.createElement('a')
+      link.href = downloadUrl
+      link.download = item.fileName
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    } catch (err) {
+      console.error('Download failed:', err)
+    }
+  }
+
+  const getImageDataUrl = () => {
+    if (item?.kind === 'file' && item.fileData && item.fileType?.startsWith('image/')) {
+      return `data:${item.fileType};base64,${item.fileData}`
+    }
+    return null
+  }
+
+  const isImage = item?.kind === 'file' && item.fileType?.startsWith('image/')
 
   if (loading) {
     return (
@@ -166,38 +207,89 @@ export function ClipboardView() {
           <Card className="bg-[#131A26] border-[#273244]">
             <CardHeader>
               <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-[#E6EAF2]">Clipboard Content</h2>
-                <Button
-                  onClick={copyToClipboard}
-                  disabled={isExpired}
-                  className="bg-[#20C15A] hover:bg-[#1ca549] disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <Copy className="w-4 h-4 mr-2" />
-                  {copied ? 'Copied!' : 'Copy'}
-                </Button>
+                <div className="flex items-center gap-3">
+                  {item.kind === 'file' ? (
+                    isImage ? <Image className="w-5 h-5 text-[#20C15A]" /> : <File className="w-5 h-5 text-[#20C15A]" />
+                  ) : (
+                    <Copy className="w-5 h-5 text-[#20C15A]" />
+                  )}
+                  <h2 className="text-lg font-semibold text-[#E6EAF2]">
+                    {item.kind === 'file' ? item.fileName || 'File' : 'Text Content'}
+                  </h2>
+                  {item.kind === 'file' && item.fileSize && (
+                    <span className="text-sm text-[#9AA7BD]">({formatFileSize(item.fileSize)})</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {item.kind === 'file' ? (
+                    <Button
+                      onClick={downloadFile}
+                      disabled={isExpired}
+                      className="bg-[#20C15A] hover:bg-[#1ca549] disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      Download
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={copyToClipboard}
+                      disabled={isExpired}
+                      className="bg-[#20C15A] hover:bg-[#1ca549] disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Copy className="w-4 h-4 mr-2" />
+                      {copied ? 'Copied!' : 'Copy'}
+                    </Button>
+                  )}
+                </div>
               </div>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <div className="relative">
-                  <textarea
-                    value={item.content}
-                    readOnly
-                    className="w-full min-h-[200px] p-4 bg-[#0B0F1A] border border-[#273244] rounded-xl text-[#E6EAF2] font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#20C15A]/20 focus:border-[#20C15A]"
-                    style={{
-                      filter: isExpired ? 'blur(4px)' : 'none',
-                      pointerEvents: isExpired ? 'none' : 'auto'
-                    }}
-                  />
-                  {isExpired && (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="bg-[#131A26]/90 border border-[#273244] rounded-xl px-6 py-3">
-                        <div className="text-[#E85B5B] font-medium">Content Expired</div>
-                        <div className="text-sm text-[#9AA7BD]">This clipboard item is no longer available</div>
-                      </div>
+                {isExpired ? (
+                  <div className="flex items-center justify-center min-h-[200px]">
+                    <div className="bg-[#131A26]/90 border border-[#273244] rounded-xl px-6 py-3">
+                      <div className="text-[#E85B5B] font-medium">Content Expired</div>
+                      <div className="text-sm text-[#9AA7BD]">This clipboard item is no longer available</div>
                     </div>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    {item.kind === 'file' ? (
+                      <div>
+                        {isImage ? (
+                          <div className="max-h-[500px] overflow-hidden rounded-xl border border-[#273244]">
+                            <img
+                              src={getImageDataUrl()!}
+                              alt={item.fileName}
+                              className="max-w-full h-auto mx-auto"
+                            />
+                          </div>
+                        ) : (
+                          <div className="bg-[#0B0F1A] border border-[#273244] rounded-xl p-6 text-center">
+                            <File className="w-16 h-16 mx-auto mb-4 text-[#9AA7BD]" />
+                            <div className="text-[#E6EAF2] font-medium mb-2">{item.fileName}</div>
+                            <div className="text-sm text-[#9AA7BD] mb-4">
+                              {item.fileType} • {item.fileSize && formatFileSize(item.fileSize)}
+                            </div>
+                            <Button
+                              onClick={downloadFile}
+                              className="bg-[#20C15A] hover:bg-[#1ca549]"
+                            >
+                              <Download className="w-4 h-4 mr-2" />
+                              Download File
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <textarea
+                        value={item.content}
+                        readOnly
+                        className="w-full min-h-[200px] p-4 bg-[#0B0F1A] border border-[#273244] rounded-xl text-[#E6EAF2] font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#20C15A]/20 focus:border-[#20C15A]"
+                      />
+                    )}
+                  </div>
+                )}
 
                 {!isExpired && (
                   <div className="flex gap-2">

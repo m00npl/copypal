@@ -15,6 +15,13 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    assetsDir: 'assets'
+    assetsDir: 'assets',
+    target: 'esnext'
+  },
+  esbuild: {
+    target: 'esnext',
+    supported: {
+      'import-assertions': true
+    }
   }
 })
