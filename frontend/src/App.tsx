@@ -22,11 +22,12 @@ interface AuthState {
 }
 
 
-const API_BASE = import.meta.env.MODE === 'production'
-  ? 'https://copypal.online/api'
-  : 'http://localhost:19234'
+const API_BASE = import.meta.env.VITE_API_BASE ||
+  (import.meta.env.MODE === 'production'
+    ? 'https://copypal.online/api'
+    : 'http://localhost:19234')
 
-
+ 
 export default function App() {
   const [link, setLink] = useState<string | null>(null)
 

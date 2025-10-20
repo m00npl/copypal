@@ -6,9 +6,10 @@ import { Input } from "@/components/ui/input"
 import { Copy, ArrowLeft, Clock, AlertCircle, Download, Image, File } from "lucide-react"
 import { format } from "date-fns"
 
-const API_BASE = import.meta.env.MODE === 'production'
-  ? 'https://copypal.online/api'
-  : 'http://localhost:19234'
+const API_BASE = import.meta.env.VITE_API_BASE ||
+  (import.meta.env.MODE === 'production'
+    ? 'https://copypal.online/api'
+    : 'http://localhost:19234')
 
 interface ClipboardItem {
   success: boolean
