@@ -1,5 +1,8 @@
 FROM oven/bun:1 AS builder
 
+ARG VITE_API_BASE=http://localhost:19234/api
+ENV VITE_API_BASE=${VITE_API_BASE}
+
 WORKDIR /app
 
 # Copy package files
