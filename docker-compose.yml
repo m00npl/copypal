@@ -3,6 +3,8 @@ services:
     image: moonplkr/copypal-backend:latest
     ports:
       - "19234:19234"
+    env_file:
+      - .env
     environment:
       - NODE_ENV=${NODE_ENV:-production}
       - PORT=${PORT:-19234}
@@ -13,8 +15,9 @@ services:
       - BASE_URL=${BASE_URL}
       - SENDGRID_API_KEY=${SENDGRID_API_KEY}
       - FROM_EMAIL=${FROM_EMAIL}
+      - FILESDB_ACCESS_TOKEN=${FILESDB_ACCESS_TOKEN}
     networks:
-      - moon_arkiv_network
+      - moon_golem_network
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.copypal-api.rule=Host(`copypal.online`) && PathPrefix(`/api/`)"
@@ -44,7 +47,7 @@ services:
     depends_on:
       - copypal-backend
     networks:
-      - moon_arkiv_network
+      - moon_golem_network
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.copypal.rule=Host(`copypal.online`)"
@@ -54,5 +57,5 @@ services:
       - "traefik.http.services.copypal.loadbalancer.server.port=80"
 
 networks:
-  moon_arkiv_network:
+  moon_golem_network:
     external: true

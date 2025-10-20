@@ -27,14 +27,28 @@ const bufferToArrayBuffer = (buffer: Buffer): ArrayBuffer =>
 
 export class FilesDBClient {
   private baseUrl: string;
+  private accessToken: string | undefined;
   private timeout: number = 600000; // 10 minutes for blockchain uploads
 
   constructor(baseUrl: string = process.env.FILESDB_URL || 'http://filedb-filesdb-1:3003') {
     this.baseUrl = baseUrl.replace(/\/$/, '');
+    this.accessToken = process.env.FILESDB_ACCESS_TOKEN;
   }
 
   private createTimeoutSignal(): AbortSignal {
     return AbortSignal.timeout(this.timeout);
+  }
+
+  private getAuthHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {
+      'X-API-Key': 'unlimited_filedb_2024',
+    };
+
+    if (this.accessToken) {
+      headers['Authorization'] = `Bearer ${this.accessToken}`;
+    }
+
+    return headers;
   }
 
   async uploadText(content: string, filename: string = 'clipboard.txt', ttlDays: number = 7, owner?: string): Promise<string> {
@@ -52,7 +66,7 @@ export class FilesDBClient {
       method: 'POST',
       body: formData,
       headers: {
-        'X-API-Key': 'unlimited_filedb_2024',
+        ...this.getAuthHeaders(),
         'Idempotency-Key': `copypal-${Date.now()}-${Math.random()}`,
         'BTL-Days': ttlDays.toString(),
       },
@@ -84,7 +98,7 @@ export class FilesDBClient {
       method: 'POST',
       body: formData,
       headers: {
-        'X-API-Key': 'unlimited_filedb_2024',
+        ...this.getAuthHeaders(),
         'Idempotency-Key': `copypal-${Date.now()}-${Math.random()}`,
         'BTL-Days': ttlDays.toString(),
       },
@@ -104,6 +118,7 @@ export class FilesDBClient {
   async downloadFile(fileId: string): Promise<{ data: Buffer; info: FileInfo }> {
     // Get file info first
     const infoResponse = await fetch(`${this.baseUrl}/files/${fileId}/info`, {
+      headers: this.getAuthHeaders(),
       signal: this.createTimeoutSignal()
     });
     if (!infoResponse.ok) {
@@ -113,6 +128,7 @@ export class FilesDBClient {
 
     // Download file
     const fileResponse = await fetch(`${this.baseUrl}/files/${fileId}`, {
+      headers: this.getAuthHeaders(),
       signal: this.createTimeoutSignal()
     });
     if (!fileResponse.ok) {
@@ -132,6 +148,7 @@ export class FilesDBClient {
 
   async getFileInfo(fileId: string): Promise<FileInfo> {
     const response = await fetch(`${this.baseUrl}/files/${fileId}/info`, {
+      headers: this.getAuthHeaders(),
       signal: this.createTimeoutSignal()
     });
     if (!response.ok) {
@@ -142,6 +159,7 @@ export class FilesDBClient {
 
   async getFileEntityKeys(fileId: string): Promise<{metadata_entity_key: string, chunk_entity_keys: string[], total_entities: number}> {
     const response = await fetch(`${this.baseUrl}/files/${fileId}/entities`, {
+      headers: this.getAuthHeaders(),
       signal: this.createTimeoutSignal()
     });
     if (!response.ok) {
@@ -152,6 +170,7 @@ export class FilesDBClient {
 
   async getFilesByOwner(owner: string): Promise<FileInfo[]> {
     const response = await fetch(`${this.baseUrl}/files/by-owner/${encodeURIComponent(owner)}`, {
+      headers: this.getAuthHeaders(),
       signal: this.createTimeoutSignal()
     });
     if (!response.ok) {
@@ -187,6 +206,7 @@ export class FilesDBClient {
     };
   }> {
     const response = await fetch(`${this.baseUrl}/files/${fileId}/status`, {
+      headers: this.getAuthHeaders(),
       signal: this.createTimeoutSignal()
     });
     if (!response.ok) {
