@@ -4,7 +4,7 @@ import { nanoid } from 'nanoid'
 import { z } from 'zod'
 import sgMail from '@sendgrid/mail'
 
-const app = new Hono()
+const app = new Hono().basePath(process.env.API_BASE_PATH || '/')
 
 // Configure SendGrid
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY

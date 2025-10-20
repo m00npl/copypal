@@ -11,6 +11,7 @@ services:
       - GOLEM_CHAIN_ID=${GOLEM_CHAIN_ID}
       - GOLEM_PRIVATE_KEY=${GOLEM_PRIVATE_KEY}
       - BASE_URL=${BASE_URL}
+      - API_BASE_PATH=${API_BASE_PATH:-/api}
       - SENDGRID_API_KEY=${SENDGRID_API_KEY}
       - FROM_EMAIL=${FROM_EMAIL}
     networks:
