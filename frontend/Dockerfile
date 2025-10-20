@@ -14,46 +14,28 @@ COPY . .
 # Build for production
 RUN bun run build
 
-# Production stage with nginx
-FROM nginx:alpine
+# Production stage - serve directly with bun
+FROM oven/bun:1
 
-COPY --from=builder /app/dist /usr/share/nginx/html
+WORKDIR /app
 
-# Create proper nginx config for SPA with cache control and API proxy
-RUN echo 'server {' > /etc/nginx/conf.d/default.conf && \
-    echo '    listen       80;' >> /etc/nginx/conf.d/default.conf && \
-    echo '    server_name  localhost;' >> /etc/nginx/conf.d/default.conf && \
-    echo '    root   /usr/share/nginx/html;' >> /etc/nginx/conf.d/default.conf && \
-    echo '    index  index.html;' >> /etc/nginx/conf.d/default.conf && \
-    echo '    ' >> /etc/nginx/conf.d/default.conf && \
-    echo '    # Proxy API requests to backend' >> /etc/nginx/conf.d/default.conf && \
-    echo '    location /api/ {' >> /etc/nginx/conf.d/default.conf && \
-    echo '        proxy_pass http://copypal-backend:19234;' >> /etc/nginx/conf.d/default.conf && \
-    echo '        proxy_set_header Host $host;' >> /etc/nginx/conf.d/default.conf && \
-    echo '        proxy_set_header X-Real-IP $remote_addr;' >> /etc/nginx/conf.d/default.conf && \
-    echo '        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;' >> /etc/nginx/conf.d/default.conf && \
-    echo '        proxy_set_header X-Forwarded-Proto $scheme;' >> /etc/nginx/conf.d/default.conf && \
-    echo '    }' >> /etc/nginx/conf.d/default.conf && \
-    echo '    ' >> /etc/nginx/conf.d/default.conf && \
-    echo '    # Cache static assets with hash in filename for 1 year' >> /etc/nginx/conf.d/default.conf && \
-    echo '    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {' >> /etc/nginx/conf.d/default.conf && \
-    echo '        expires 1y;' >> /etc/nginx/conf.d/default.conf && \
-    echo '        add_header Cache-Control "public, immutable";' >> /etc/nginx/conf.d/default.conf && \
-    echo '        try_files $uri =404;' >> /etc/nginx/conf.d/default.conf && \
-    echo '    }' >> /etc/nginx/conf.d/default.conf && \
-    echo '    ' >> /etc/nginx/conf.d/default.conf && \
-    echo '    # Never cache index.html and manifest files' >> /etc/nginx/conf.d/default.conf && \
-    echo '    location ~* \.(html|json)$ {' >> /etc/nginx/conf.d/default.conf && \
-    echo '        expires -1;' >> /etc/nginx/conf.d/default.conf && \
-    echo '        add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0";' >> /etc/nginx/conf.d/default.conf && \
-    echo '        add_header Pragma "no-cache";' >> /etc/nginx/conf.d/default.conf && \
-    echo '        try_files $uri $uri/ /index.html;' >> /etc/nginx/conf.d/default.conf && \
-    echo '    }' >> /etc/nginx/conf.d/default.conf && \
-    echo '    ' >> /etc/nginx/conf.d/default.conf && \
-    echo '    # All other files (including SPA routing)' >> /etc/nginx/conf.d/default.conf && \
-    echo '    location / {' >> /etc/nginx/conf.d/default.conf && \
-    echo '        try_files $uri $uri/ /index.html;' >> /etc/nginx/conf.d/default.conf && \
-    echo '    }' >> /etc/nginx/conf.d/default.conf && \
-    echo '}' >> /etc/nginx/conf.d/default.conf
+COPY --from=builder /app/dist ./public
+
+# Simple static server
+RUN echo 'Bun.serve({' > server.js && \
+    echo '  port: 80,' >> server.js && \
+    echo '  hostname: "0.0.0.0",' >> server.js && \
+    echo '  fetch(req) {' >> server.js && \
+    echo '    const url = new URL(req.url);' >> server.js && \
+    echo '    const path = url.pathname === "/" ? "/index.html" : url.pathname;' >> server.js && \
+    echo '    const file = Bun.file(`./public${path}`);' >> server.js && \
+    echo '    if (file.size === 0 && path !== "/index.html") {' >> server.js && \
+    echo '      return new Response(Bun.file("./public/index.html"));' >> server.js && \
+    echo '    }' >> server.js && \
+    echo '    return new Response(file);' >> server.js && \
+    echo '  }' >> server.js && \
+    echo '});' >> server.js
 
 EXPOSE 80
+
+CMD ["bun", "server.js"]

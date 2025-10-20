@@ -6,15 +6,34 @@ services:
     environment:
       - NODE_ENV=${NODE_ENV:-production}
       - PORT=${PORT:-19234}
-      - GOLEM_RPC_URL=${GOLEM_RPC_URL}
-      - GOLEM_WS_URL=${GOLEM_WS_URL}
-      - GOLEM_CHAIN_ID=${GOLEM_CHAIN_ID}
-      - GOLEM_PRIVATE_KEY=${GOLEM_PRIVATE_KEY}
+      - ARKIV_RPC_URL=${ARKIV_RPC_URL}
+      - ARKIV_WS_URL=${ARKIV_WS_URL}
+      - ARKIV_CHAIN_ID=${ARKIV_CHAIN_ID}
+      - ARKIV_PRIVATE_KEY=${ARKIV_PRIVATE_KEY}
       - BASE_URL=${BASE_URL}
       - SENDGRID_API_KEY=${SENDGRID_API_KEY}
       - FROM_EMAIL=${FROM_EMAIL}
     networks:
-      - moon_golem_network
+      - moon_arkiv_network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.copypal-api.rule=Host(`copypal.online`) && PathPrefix(`/api/`)"
+      - "traefik.http.routers.copypal-api.entrypoints=websecure"
+      - "traefik.http.routers.copypal-api.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.copypal-api.priority=300"
+      - "traefik.http.middlewares.copypal-api-stripprefix.stripprefix.prefixes=/api"
+      - "traefik.http.routers.copypal-api.middlewares=copypal-api-stripprefix"
+      - "traefik.http.routers.copypal-api.service=copypal-api"
+      - "traefik.http.services.copypal-api.loadbalancer.server.port=19234"
+      - "traefik.http.services.copypal-api.loadbalancer.responseForwarding.flushInterval=1s"
+      - "traefik.http.services.copypal-api.loadbalancer.passhostheader=true"
+      # WebSocket support
+      - "traefik.http.routers.copypal-ws.rule=Host(`copypal.online`) && Path(`/ws/progress`)"
+      - "traefik.http.routers.copypal-ws.entrypoints=websecure"
+      - "traefik.http.routers.copypal-ws.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.copypal-ws.priority=200"
+      - "traefik.http.routers.copypal-ws.service=copypal-ws"
+      - "traefik.http.services.copypal-ws.loadbalancer.server.port=19234"
 
   copypal-frontend:
     image: moonplkr/copypal-frontend:latest
@@ -25,8 +44,15 @@ services:
     depends_on:
       - copypal-backend
     networks:
-      - moon_golem_network
+      - moon_arkiv_network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.copypal.rule=Host(`copypal.online`)"
+      - "traefik.http.routers.copypal.entrypoints=websecure"
+      - "traefik.http.routers.copypal.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.copypal.priority=50"
+      - "traefik.http.services.copypal.loadbalancer.server.port=80"
 
 networks:
-  moon_golem_network:
+  moon_arkiv_network:
     external: true
