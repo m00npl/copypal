@@ -1,3 +1,15 @@
+import * as Sentry from '@sentry/bun'
+
+// Initialize GlitchTip (Sentry-compatible) error tracking
+if (process.env.GLITCHTIP_DSN) {
+  Sentry.init({
+    dsn: process.env.GLITCHTIP_DSN,
+    environment: process.env.NODE_ENV || 'production',
+    tracesSampleRate: 1.0,
+  })
+  console.log('✅ GlitchTip error tracking initialized')
+}
+
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { nanoid } from 'nanoid'
@@ -109,6 +121,16 @@ async function startProgressMonitoring(clipboardId: string) {
 }
 
 const app = new Hono<{ Bindings: { server: Server } }>()
+
+// Global error handler - send errors to GlitchTip
+app.onError((err, c) => {
+  console.error('Error caught:', err)
+  Sentry.captureException(err)
+  return c.json({
+    error: err.message || 'Internal server error',
+    success: false
+  }, 500)
+})
 
 // Configure SendGrid
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY
@@ -666,11 +688,12 @@ app.get('/v1/clipboard/:id', async (c) => {
   const fileId = c.req.param('id')
 
   try {
-    const info = await filesDBClient.getFileInfo(fileId)
+    // Download file and info in one call instead of two separate calls
+    const { data, info } = await filesDBClient.downloadFile(fileId)
 
     if (info.content_type?.startsWith('text/plain')) {
       // Text clipboard
-      const content = await filesDBClient.downloadText(fileId)
+      const content = data.toString('utf-8')
       return c.json({
         success: true,
         kind: 'text',
@@ -682,20 +705,17 @@ app.get('/v1/clipboard/:id', async (c) => {
       // Check if this is a chunked file (metadata file)
       const isChunkedFile = info.original_filename?.endsWith('.metadata.json')
 
-      let data: Buffer, fileInfo: any
+      let fileData: string, fileInfo: any
       if (isChunkedFile) {
         // Assemble chunked file
         const assembled = await downloadFileFromChunks(fileId)
-        data = assembled.data
+        fileData = assembled.data.toString('base64')
         fileInfo = assembled.info
       } else {
-        // Regular file
-        const downloadResult = await filesDBClient.downloadFile(fileId)
-        data = downloadResult.data
+        // Regular file - use already downloaded data
+        fileData = data.toString('base64')
         fileInfo = info
       }
-
-      const fileData = data.toString('base64')
 
       return c.json({
         success: true,

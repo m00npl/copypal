@@ -13,6 +13,7 @@
   "dependencies": {
     "@hono/node-server": "^1.12.2",
     "@sendgrid/mail": "^8.1.6",
+    "@sentry/bun": "^10.22.0",
     "arkiv-sdk": "latest",
     "hono": "^4.6.3",
     "nanoid": "^5.0.7",

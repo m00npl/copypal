@@ -16,6 +16,7 @@ services:
       - SENDGRID_API_KEY=${SENDGRID_API_KEY}
       - FROM_EMAIL=${FROM_EMAIL}
       - FILESDB_ACCESS_TOKEN=${FILESDB_ACCESS_TOKEN}
+      - GLITCHTIP_DSN=${GLITCHTIP_DSN}
     networks:
       - moon_golem_network
     labels:
@@ -44,6 +45,7 @@ services:
       - "8881:80"
     environment:
       - NODE_ENV=${NODE_ENV:-production}
+      - VITE_GLITCHTIP_DSN=${VITE_GLITCHTIP_DSN}
     depends_on:
       - copypal-backend
     networks:
