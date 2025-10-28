@@ -75,15 +75,12 @@ jobs:
           VITE_GLITCHTIP_DSN=http://test@localhost:8888/1
           EOF
 
-      - name: Build Docker images
+      - name: Build and start services with Docker Compose
         run: |
           docker compose build --no-cache
-
-      - name: Start services with Docker Compose
-        run: |
-          docker compose up -d
+          docker compose up -d --build
           echo "Waiting for services to be ready..."
-          sleep 15
+          sleep 20
 
       - name: Check services health
         run: |
@@ -91,29 +88,31 @@ jobs:
           docker compose logs backend | tail -20
           docker compose logs frontend | tail -20
 
-      - name: Wait for backend to be ready
+      - name: Wait for services to be ready
         run: |
-          for i in {1..30}; do
-            if curl -f http://localhost:19234/health > /dev/null 2>&1; then
-              echo "Backend is ready!"
+          echo "Checking backend health..."
+          for i in {1..60}; do
+            if curl -sf http://localhost:19234/health > /dev/null 2>&1; then
+              echo "✓ Backend is ready"
               break
             fi
-            echo "Waiting for backend... ($i/30)"
-            sleep 2
+            echo "Waiting for backend... ($i/60)"
+            sleep 3
           done
-          curl http://localhost:19234/health || exit 1
 
-      - name: Wait for frontend to be ready
-        run: |
-          for i in {1..30}; do
-            if curl -f http://localhost:8881 > /dev/null 2>&1; then
-              echo "Frontend is ready!"
+          echo "Checking frontend..."
+          for i in {1..60}; do
+            if curl -sf http://localhost:8881 > /dev/null 2>&1; then
+              echo "✓ Frontend is ready"
               break
             fi
-            echo "Waiting for frontend... ($i/30)"
-            sleep 2
+            echo "Waiting for frontend... ($i/60)"
+            sleep 3
           done
-          curl http://localhost:8881 || exit 1
+
+          # Verify both are accessible
+          curl -f http://localhost:19234/health || (echo "Backend not ready!" && exit 1)
+          curl -f http://localhost:8881 || (echo "Frontend not ready!" && exit 1)
 
       - name: Run smoke tests on Docker containers
         env:

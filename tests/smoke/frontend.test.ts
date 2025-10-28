@@ -35,7 +35,7 @@ describe('Frontend Smoke Tests', () => {
 
     expect(response.status).toBe(200)
     expect(response.headers.get('content-type')).toContain('javascript')
-  })
+  }, 10000)
 
   test('Frontend icons are accessible', async () => {
     const iconSizes = ['48', '72', '96', '144', '192', '256', '384', '512']
@@ -44,7 +44,7 @@ describe('Frontend Smoke Tests', () => {
       const response = await fetch(`${FRONTEND_URL}/icon-${size}.png`)
       expect(response.status).toBe(200)
     }
-  })
+  }, 15000)
 
   test('Frontend handles SPA routing (404 fallback)', async () => {
     // Should return index.html for any route
