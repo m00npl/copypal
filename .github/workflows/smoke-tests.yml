@@ -75,6 +75,10 @@ jobs:
           VITE_GLITCHTIP_DSN=http://test@localhost:8888/1
           EOF
 
+      - name: Build Docker images
+        run: |
+          docker compose build --no-cache
+
       - name: Start services with Docker Compose
         run: |
           docker compose up -d
