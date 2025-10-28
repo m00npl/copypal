@@ -1,0 +1,15 @@
+{
+  "name": "copypal",
+  "version": "1.0.0",
+  "description": "Blockchain-based clipboard sharing",
+  "scripts": {
+    "test:smoke": "bun test tests/smoke/*.test.ts",
+    "test:smoke:backend": "bun test tests/smoke/backend.test.ts",
+    "test:smoke:frontend": "bun test tests/smoke/frontend.test.ts",
+    "test:smoke:integration": "bun test tests/smoke/integration.test.ts",
+    "test:smoke:production": "API_BASE=https://copypal.online/api FRONTEND_URL=https://copypal.online bun test tests/smoke/*.test.ts"
+  },
+  "devDependencies": {
+    "bun-types": "latest"
+  }
+}
