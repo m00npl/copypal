@@ -1,0 +1,78 @@
+name: Manual Smoke Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_base:
+        description: 'API Base URL'
+        required: true
+        default: 'https://copypal.online/api'
+        type: string
+      frontend_url:
+        description: 'Frontend URL'
+        required: true
+        default: 'https://copypal.online'
+        type: string
+      test_suite:
+        description: 'Test Suite'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - backend
+          - frontend
+          - integration
+
+jobs:
+  manual-smoke-tests:
+    name: Manual Smoke Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Run smoke tests
+        env:
+          API_BASE: ${{ inputs.api_base }}
+          FRONTEND_URL: ${{ inputs.frontend_url }}
+        run: |
+          case "${{ inputs.test_suite }}" in
+            backend)
+              bun test tests/smoke/backend.test.ts
+              ;;
+            frontend)
+              bun test tests/smoke/frontend.test.ts
+              ;;
+            integration)
+              bun test tests/smoke/integration.test.ts
+              ;;
+            all)
+              bun test tests/smoke/*.test.ts
+              ;;
+          esac
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-test-results-manual
+          path: |
+            tests/smoke/*.test.ts
+            .bun-test-results/
+
+      - name: Print test summary
+        if: always()
+        run: |
+          echo "## Smoke Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **API Base:** ${{ inputs.api_base }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Frontend URL:** ${{ inputs.frontend_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Test Suite:** ${{ inputs.test_suite }}" >> $GITHUB_STEP_SUMMARY

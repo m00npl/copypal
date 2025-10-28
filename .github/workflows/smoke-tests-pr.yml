@@ -1,0 +1,123 @@
+name: PR Smoke Tests
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'docker-compose.yml'
+
+jobs:
+  smoke-tests-pr:
+    name: PR Smoke Tests (Docker)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout PR code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Create .env file
+        run: |
+          cat > .env << EOF
+          GOLEM_CHAIN_ID=1337
+          GOLEM_PRIVATE_KEY=0x0000000000000000000000000000000000000000000000000000000000000000
+          BASE_URL=http://localhost:19234
+          API_BASE_PATH=/api
+          SENDGRID_API_KEY=
+          FROM_EMAIL=test@example.com
+          FILESDB_URL=https://filesdb.golem.network
+          FILESDB_ACCESS_TOKEN=test_token
+          GLITCHTIP_DSN=http://test@localhost:8888/1
+          VITE_GLITCHTIP_DSN=http://test@localhost:8888/1
+          EOF
+
+      - name: Build and start services
+        run: |
+          docker compose build --no-cache
+          docker compose up -d
+          echo "Waiting for services to start..."
+          sleep 20
+
+      - name: Check services
+        run: |
+          docker compose ps
+          docker compose logs backend | tail -30
+          docker compose logs frontend | tail -30
+
+      - name: Wait for services to be ready
+        run: |
+          echo "Checking backend health..."
+          for i in {1..30}; do
+            if curl -f http://localhost:19234/health > /dev/null 2>&1; then
+              echo "✓ Backend is ready"
+              break
+            fi
+            echo "Waiting for backend... ($i/30)"
+            sleep 2
+          done
+
+          echo "Checking frontend..."
+          for i in {1..30}; do
+            if curl -f http://localhost:8881 > /dev/null 2>&1; then
+              echo "✓ Frontend is ready"
+              break
+            fi
+            echo "Waiting for frontend... ($i/30)"
+            sleep 2
+          done
+
+      - name: Run smoke tests
+        env:
+          API_BASE: http://localhost:19234
+          FRONTEND_URL: http://localhost:8881
+        run: |
+          bun test tests/smoke/backend.test.ts tests/smoke/frontend.test.ts
+          TEST_EXIT_CODE=$?
+
+          echo "## Smoke Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ $TEST_EXIT_CODE -eq 0 ]; then
+            echo "✅ All smoke tests passed!" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Some smoke tests failed!" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          exit $TEST_EXIT_CODE
+
+      - name: Show logs on failure
+        if: failure()
+        run: |
+          echo "=== Backend logs ==="
+          docker compose logs backend
+          echo ""
+          echo "=== Frontend logs ==="
+          docker compose logs frontend
+
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v
+
+      - name: Comment on PR
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const status = '${{ job.status }}';
+            const emoji = status === 'success' ? '✅' : '❌';
+            const message = status === 'success'
+              ? 'All smoke tests passed!'
+              : 'Some smoke tests failed. Check the workflow logs for details.';
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `${emoji} **Smoke Tests:** ${message}\n\n[View workflow run](${context.payload.repository.html_url}/actions/runs/${context.runId})`
+            });

@@ -1,0 +1,152 @@
+name: Smoke Tests
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'tests/smoke/**'
+      - 'docker-compose.yml'
+      - '.github/workflows/smoke-tests.yml'
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+  schedule:
+    # Run smoke tests every 6 hours
+    - cron: '0 */6 * * *'
+
+jobs:
+  smoke-tests-production:
+    name: Production Smoke Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Run smoke tests on production
+        env:
+          API_BASE: https://copypal.online/api
+          FRONTEND_URL: https://copypal.online
+        run: bun test tests/smoke/*.test.ts
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-test-results-production
+          path: |
+            tests/smoke/*.test.ts
+            .bun-test-results/
+
+  smoke-tests-docker:
+    name: Docker Smoke Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Create .env file
+        run: |
+          cat > .env << EOF
+          GOLEM_CHAIN_ID=1337
+          GOLEM_PRIVATE_KEY=0x0000000000000000000000000000000000000000000000000000000000000000
+          BASE_URL=http://localhost:19234
+          API_BASE_PATH=/api
+          SENDGRID_API_KEY=
+          FROM_EMAIL=test@example.com
+          FILESDB_URL=https://filesdb.golem.network
+          FILESDB_ACCESS_TOKEN=test_token
+          GLITCHTIP_DSN=http://test@localhost:8888/1
+          VITE_GLITCHTIP_DSN=http://test@localhost:8888/1
+          EOF
+
+      - name: Start services with Docker Compose
+        run: |
+          docker compose up -d
+          echo "Waiting for services to be ready..."
+          sleep 15
+
+      - name: Check services health
+        run: |
+          docker compose ps
+          docker compose logs backend | tail -20
+          docker compose logs frontend | tail -20
+
+      - name: Wait for backend to be ready
+        run: |
+          for i in {1..30}; do
+            if curl -f http://localhost:19234/health > /dev/null 2>&1; then
+              echo "Backend is ready!"
+              break
+            fi
+            echo "Waiting for backend... ($i/30)"
+            sleep 2
+          done
+          curl http://localhost:19234/health || exit 1
+
+      - name: Wait for frontend to be ready
+        run: |
+          for i in {1..30}; do
+            if curl -f http://localhost:8881 > /dev/null 2>&1; then
+              echo "Frontend is ready!"
+              break
+            fi
+            echo "Waiting for frontend... ($i/30)"
+            sleep 2
+          done
+          curl http://localhost:8881 || exit 1
+
+      - name: Run smoke tests on Docker containers
+        env:
+          API_BASE: http://localhost:19234
+          FRONTEND_URL: http://localhost:8881
+        run: bun test tests/smoke/backend.test.ts tests/smoke/frontend.test.ts
+
+      - name: Show container logs on failure
+        if: failure()
+        run: |
+          echo "=== Backend logs ==="
+          docker compose logs backend
+          echo "=== Frontend logs ==="
+          docker compose logs frontend
+
+      - name: Stop services
+        if: always()
+        run: docker compose down -v
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-test-results-docker
+          path: |
+            tests/smoke/*.test.ts
+            .bun-test-results/
+
+  notify-on-failure:
+    name: Notify on Failure
+    needs: [smoke-tests-production, smoke-tests-docker]
+    if: failure()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send notification
+        run: |
+          echo "Smoke tests failed!"
+          echo "Production tests: ${{ needs.smoke-tests-production.result }}"
+          echo "Docker tests: ${{ needs.smoke-tests-docker.result }}"

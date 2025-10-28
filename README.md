@@ -1,5 +1,8 @@
 # CopyPal
 
+[![Smoke Tests](https://github.com/m00npl/copypal/actions/workflows/smoke-tests.yml/badge.svg)](https://github.com/m00npl/copypal/actions/workflows/smoke-tests.yml)
+[![PR Tests](https://github.com/m00npl/copypal/actions/workflows/smoke-tests-pr.yml/badge.svg)](https://github.com/m00npl/copypal/actions/workflows/smoke-tests-pr.yml)
+
 A temporary, cross-device clipboard backed by DB-Chain. Share text, files, and data across devices with customizable expiration times.
 
 ## Features
@@ -75,6 +78,42 @@ docker compose up -d
 The application will be available at:
 - Frontend: http://localhost:8881
 - Backend API: http://localhost:19234
+
+## Testing
+
+### Smoke Tests
+
+CopyPal includes comprehensive smoke tests for backend, frontend, and integration scenarios.
+
+**Run locally (requires running containers):**
+```bash
+bun test:smoke
+```
+
+**Run on production:**
+```bash
+bun test:smoke:production
+```
+
+**Individual test suites:**
+```bash
+bun test:smoke:backend       # Backend API tests
+bun test:smoke:frontend      # Frontend UI tests
+bun test:smoke:integration   # End-to-end tests
+```
+
+**Custom environment:**
+```bash
+API_BASE=https://custom.com/api FRONTEND_URL=https://custom.com bun test tests/smoke/*.test.ts
+```
+
+### CI/CD
+
+Smoke tests run automatically on:
+- Every push to `main`
+- Every pull request
+- Scheduled runs (every 6 hours)
+- Manual trigger via GitHub Actions
 
 ## Production Deployment
 
