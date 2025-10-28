@@ -129,5 +129,5 @@ describe('Backend Smoke Tests', () => {
     const response = await fetch(`${API_BASE}/v2/quota`)
 
     expect(response.status).toBeGreaterThanOrEqual(200)
-  })
+  }, 30000) // FilesDB can be slow on production
 })
