@@ -1,7 +1,25 @@
+# Build stage
+FROM oven/bun:1 AS builder
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json ./
+
+# Install dependencies
+RUN bun install
+
+# Copy source code
+COPY . .
+
+# Build for production
+RUN bun run build
+
+# Production stage - nginx
 FROM nginx:alpine
 
-# Copy the built dist folder to nginx html directory
-COPY dist /usr/share/nginx/html
+# Copy built dist folder to nginx html directory
+COPY --from=builder /app/dist /usr/share/nginx/html
 
 # Copy custom nginx configuration for React Router
 RUN echo 'server {' > /etc/nginx/conf.d/default.conf && \
