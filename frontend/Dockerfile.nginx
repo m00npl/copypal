@@ -9,10 +9,7 @@ COPY package.json ./
 # Install dependencies
 RUN bun install
 
-# Copy public directory first (needed for Vite build)
-COPY public ./public
-
-# Copy source code
+# Copy source code (includes public directory for Vite)
 COPY . .
 
 # Build for production
