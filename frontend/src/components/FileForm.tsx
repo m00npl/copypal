@@ -3,17 +3,21 @@ import { Button } from "@/components/ui/button"
 import { ExpirationPicker } from "./ExpirationPicker"
 import { Upload, Trash2, Eye, Link as LinkIcon } from "lucide-react"
 import { FilePreviewModal } from "./modals/FilePreviewModal"
+import { FileProgressBarWS } from "./FileProgressBarWS"
 
 interface FileFormProps {
-  onCreateLink: (data: { file: File; expiresAt: Date }) => Promise<void>
+  onCreateLink: (data: { file: File; expiresAt: Date }) => Promise<string | null>
+  onCreateMultipleLinks?: (data: { files: File[]; expiresAt: Date }) => Promise<string[]>
 }
 
 interface FileWithProgress {
   file: File
   progress: number
+  clipboardId?: string | null
+  isUploading?: boolean
 }
 
-export function FileForm({ onCreateLink }: FileFormProps) {
+export function FileForm({ onCreateLink, onCreateMultipleLinks }: FileFormProps) {
   const [files, setFiles] = useState<FileWithProgress[]>([])
   const [preset, setPreset] = useState<'15m' | '1h' | '1d' | '7d' | 'custom'>('1h')
   const [customDate, setCustomDate] = useState<Date | null>(null)
@@ -49,9 +53,14 @@ export function FileForm({ onCreateLink }: FileFormProps) {
       return true
     })
 
-    const filesWithProgress = newFiles.map(file => ({ file, progress: 100 }))
+    const filesWithProgress = newFiles.map(file => ({
+      file,
+      progress: 100,
+      clipboardId: null,
+      isUploading: false
+    }))
     setFiles(prev => [...prev, ...filesWithProgress])
-  }, [])
+  }, [maxFileSize])
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -107,11 +116,33 @@ export function FileForm({ onCreateLink }: FileFormProps) {
 
     setIsLoading(true)
     try {
-      // For now, we'll just use the first file
-      await onCreateLink({
-        file: files[0].file,
-        expiresAt: getExpiresAt()
-      })
+      if (files.length === 1) {
+        // Mark file as uploading
+        setFiles(prev => prev.map((fileWithProgress, index) =>
+          index === 0
+            ? { ...fileWithProgress, isUploading: true }
+            : fileWithProgress
+        ))
+
+        // Single file - use original handler
+        const clipboardId = await onCreateLink({
+          file: files[0].file,
+          expiresAt: getExpiresAt()
+        })
+
+        // Update file with clipboard ID
+        setFiles(prev => prev.map((fileWithProgress, index) =>
+          index === 0
+            ? { ...fileWithProgress, isUploading: false, clipboardId }
+            : fileWithProgress
+        ))
+      } else if (files.length > 1 && onCreateMultipleLinks) {
+        // Multiple files - use new handler
+        await onCreateMultipleLinks({
+          files: files.map(f => f.file),
+          expiresAt: getExpiresAt()
+        })
+      }
     } finally {
       setIsLoading(false)
     }
@@ -134,7 +165,7 @@ export function FileForm({ onCreateLink }: FileFormProps) {
             onClick={() => document.getElementById('file-input')?.click()}
           >
             <Upload className="w-8 h-8 mx-auto mb-3 text-[#20C15A]" />
-            <p className="text-[#E6EAF2] mb-1">Drop a file here or tap to upload</p>
+            <p className="text-[#E6EAF2] mb-1">Drop files here or tap to upload</p>
             <p className="text-sm text-[#9AA7BD]">Maximum file size: 64MB</p>
             <input
               id="file-input"
@@ -181,13 +212,14 @@ export function FileForm({ onCreateLink }: FileFormProps) {
                   </div>
                 </div>
 
-                {/* Progress bar */}
-                <div className="mt-3 w-full bg-[#273244] rounded-full h-2">
-                  <div
-                    className="bg-[#20C15A] h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${fileWithProgress.progress}%` }}
-                  />
-                </div>
+                {/* Dual Progress Bar with WebSocket */}
+                <FileProgressBarWS
+                  clipboardId={fileWithProgress.clipboardId ?? null}
+                  isUploading={fileWithProgress.isUploading || false}
+                  onComplete={() => {
+                    // Optional: You could add some completion logic here
+                  }}
+                />
               </div>
             ))}
 
@@ -229,7 +261,7 @@ export function FileForm({ onCreateLink }: FileFormProps) {
           ) : (
             <div className="flex items-center gap-2">
               <LinkIcon className="w-4 h-4" />
-              Create file link
+              {files.length === 1 ? 'Create file link' : `Create ${files.length} file links`}
             </div>
           )}
         </Button>

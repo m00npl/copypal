@@ -24,7 +24,7 @@ CopyPal consists of two main components:
 - Docker and Docker Compose
 - Git
 - A SendGrid account for email functionality
-- Access to Golem blockchain network
+- Access to Arkiv blockchain network
 
 ## Quick Start
 
@@ -56,7 +56,7 @@ Edit the `.env` file with your actual values:
 
 ```bash
 # Required: Your Ethereum private key
-GOLEM_PRIVATE_KEY=your_private_key_here
+ARKIV_PRIVATE_KEY=your_private_key_here
 
 # Required: Your SendGrid API key
 SENDGRID_API_KEY=your_sendgrid_api_key_here
@@ -146,10 +146,10 @@ server {
 |----------|-------------|----------|
 | `NODE_ENV` | Environment (production/development) | No |
 | `PORT` | Backend server port | No (default: 19234) |
-| `GOLEM_RPC_URL` | Golem blockchain RPC endpoint | Yes |
-| `GOLEM_WS_URL` | Golem blockchain WebSocket endpoint | Yes |
-| `GOLEM_CHAIN_ID` | Golem blockchain chain ID | Yes |
-| `GOLEM_PRIVATE_KEY` | Your Ethereum private key | Yes |
+| `ARKIV_RPC_URL` | Arkiv blockchain RPC endpoint | Yes |
+| `ARKIV_WS_URL` | Arkiv blockchain WebSocket endpoint | Yes |
+| `ARKIV_CHAIN_ID` | Arkiv blockchain chain ID | Yes |
+| `ARKIV_PRIVATE_KEY` | Your Ethereum private key | Yes |
 | `SENDGRID_API_KEY` | SendGrid API key for emails | Yes |
 | `FROM_EMAIL` | Email address for outgoing emails | Yes |
 | `BASE_URL` | Base URL for API endpoints | Yes |
@@ -217,7 +217,7 @@ bun run build
 1. **Calendar not displaying properly**: Clear browser cache and reload
 2. **API connection issues**: Check backend logs and network connectivity
 3. **Email not sending**: Verify SendGrid API key and domain configuration
-4. **Blockchain connection issues**: Check Golem network status and RPC endpoints
+4. **Blockchain connection issues**: Check Arkiv network status and RPC endpoints
 
 ### Logs
 

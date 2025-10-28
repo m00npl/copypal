@@ -16,6 +16,10 @@ export function WalletConnectorList({ onConnect, onCancel }: WalletConnectorList
         if (data.accounts[0] && onConnect) {
           onConnect(data.accounts[0])
         }
+      },
+      onError: (error) => {
+        console.error('Wallet connection failed:', error)
+        // Could add toast notification here
       }
     })
   }

@@ -16,12 +16,23 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
-    target: 'esnext'
+    target: 'esnext',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          wagmi: ['wagmi', 'viem', '@tanstack/react-query']
+        }
+      }
+    }
   },
   esbuild: {
     target: 'esnext',
     supported: {
       'import-assertions': true
     }
+  },
+  define: {
+    global: 'globalThis'
   }
 })

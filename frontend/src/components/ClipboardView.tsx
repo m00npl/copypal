@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useParams, useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Card, CardHeader, CardContent } from "@/components/ui/card"
@@ -32,17 +32,13 @@ export function ClipboardView() {
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
 
-  useEffect(() => {
+  const fetchItem = useCallback(async () => {
     if (!id) {
       setError('Invalid clipboard ID')
       setLoading(false)
       return
     }
 
-    fetchItem()
-  }, [id])
-
-  const fetchItem = async () => {
     try {
       const response = await fetch(`${API_BASE}/v1/clipboard/${id}`)
       const data = await response.json()
@@ -57,7 +53,18 @@ export function ClipboardView() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [id])
+
+  useEffect(() => {
+    if (!id) {
+      setError('Invalid clipboard ID')
+      setLoading(false)
+      return
+    }
+
+    setLoading(true)
+    fetchItem()
+  }, [id, fetchItem])
 
   const copyToClipboard = async () => {
     if (!item?.content) return

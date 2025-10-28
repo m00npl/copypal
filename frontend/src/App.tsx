@@ -30,6 +30,7 @@ const API_BASE = import.meta.env.VITE_API_BASE ||
  
 export default function App() {
   const [link, setLink] = useState<string | null>(null)
+  const [links, setLinks] = useState<string[]>([])
 
   // Auth state
   const [auth, setAuth] = useState<AuthState>({
@@ -57,9 +58,12 @@ export default function App() {
   const checkSession = async () => {
     const sessionId = localStorage.getItem('sessionId')
     if (!sessionId) {
+      console.log('No sessionId found in localStorage')
       setAuth(prev => ({ ...prev, loading: false }))
       return
     }
+
+    console.log('Checking session validity for:', sessionId.substring(0, 10) + '...')
 
     try {
       const response = await fetch(`${API_BASE}/v1/auth/session`, {
@@ -70,22 +74,26 @@ export default function App() {
 
       if (response.ok) {
         const data = await response.json()
+        console.log('Session valid for user:', data.user?.email)
         setAuth({
           user: data.user,
           sessionId,
           loading: false
         })
       } else {
+        console.log('Session invalid, status:', response.status)
         localStorage.removeItem('sessionId')
         setAuth({ user: null, sessionId: null, loading: false })
+        // Don't show message, just silently logout
       }
     } catch (err) {
       console.error('Session check failed:', err)
+      localStorage.removeItem('sessionId')
       setAuth({ user: null, sessionId: null, loading: false })
     }
   }
 
-  const handleCreateLink = async (data: { content?: string; file?: File; expiresAt: Date }) => {
+  const handleCreateLink = async (data: { content?: string; file?: File; expiresAt: Date }): Promise<string | null> => {
     setError('')
 
     try {
@@ -148,11 +156,128 @@ export default function App() {
         setLink(responseData.url)
         setMessage('Link created successfully!')
         navigator.clipboard?.writeText(responseData.url)
+
+        // Extract clipboard ID from URL for progress tracking
+        const clipboardId = responseData.url.split('/').pop()
+        if (clipboardId) {
+          return clipboardId
+        }
       } else {
         setError(responseData.error || 'Failed to create link')
       }
     } catch (err) {
       setError('Network error. Please try again.')
+    }
+
+    return null
+  }
+
+  const createSingleLink = async (data: { content?: string; file?: File; expiresAt: Date }): Promise<string> => {
+    // Perform Proof of Work
+    const pow = await doPow(18)
+
+    const headers: HeadersInit = { 'Content-Type': 'application/json' }
+    if (auth.sessionId) {
+      headers['Authorization'] = `Bearer ${auth.sessionId}`
+    }
+
+    let payload: any = {
+      expiresAt: data.expiresAt.toISOString(),
+      pow: {
+        nonce: pow.nonce,
+        salt: Array.from(pow.salt),
+        digest: pow.digest,
+        difficulty: pow.difficulty
+      }
+    }
+
+    if (data.file) {
+      // Convert file to base64
+      const fileData = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => {
+          const result = reader.result as string
+          resolve(result.split(',')[1]) // Remove data:... prefix
+        }
+        reader.onerror = reject
+        reader.readAsDataURL(data.file!)
+      })
+
+      payload = {
+        ...payload,
+        kind: 'file',
+        content: `File: ${data.file.name}`,
+        fileName: data.file.name,
+        fileType: data.file.type,
+        fileSize: data.file.size,
+        fileData: fileData
+      }
+    } else {
+      payload = {
+        ...payload,
+        kind: 'text',
+        content: data.content || ''
+      }
+    }
+
+    const response = await fetch(`${API_BASE}/v1/clipboard`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload)
+    })
+
+    const responseData = await response.json()
+
+    if (responseData.success) {
+      return responseData.url
+    } else {
+      throw new Error(responseData.error || 'Failed to create link')
+    }
+  }
+
+  const handleCreateMultipleLinks = async (data: { files: File[]; expiresAt: Date }): Promise<string[]> => {
+    setError('')
+    setMessage('')
+    setLinks([])
+
+    const createdLinks: string[] = []
+
+    try {
+      for (let i = 0; i < data.files.length; i++) {
+        const file = data.files[i]
+
+        try {
+          const url = await createSingleLink({ file, expiresAt: data.expiresAt })
+          createdLinks.push(url)
+
+          // Update progress
+          setMessage(`Creating links... ${i + 1}/${data.files.length}`)
+
+          // Wait a bit to avoid overwhelming the server
+          if (i < data.files.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 200))
+          }
+        } catch (err) {
+          console.error(`Failed to create link for ${file.name}:`, err)
+          // Continue with other files
+        }
+      }
+
+      if (createdLinks.length > 0) {
+        setLinks(createdLinks)
+        setMessage(`Created ${createdLinks.length} links successfully!`)
+
+        // Copy all links to clipboard (each on new line)
+        const allLinks = createdLinks.join('\n')
+        navigator.clipboard?.writeText(allLinks)
+      } else {
+        setError('Failed to create any links.')
+      }
+
+      return createdLinks
+    } catch (err) {
+      setError('Failed to create links. Please try again.')
+      return []
     }
   }
 
@@ -219,18 +344,52 @@ export default function App() {
     }
   }
 
-  const handleWalletConnect = (address: string) => {
-    // For now, just set as authenticated without backend verification
-    // In production, you'd want to verify signature or implement proper wallet auth
-    const sessionId = `wallet_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-    localStorage.setItem('sessionId', sessionId)
+  const handleWalletConnect = async (address: string) => {
+    try {
+      console.log('Starting wallet authentication for:', address)
+      setError('')
+      setMessage('')
 
-    setAuth({
-      user: { walletAddress: address },
-      sessionId,
-      loading: false
-    })
-    setMessage(`Connected with wallet ${address.slice(0, 6)}...${address.slice(-4)}`)
+      // Create a message to sign for authentication
+      const message = `Sign this message to authenticate with CopyPal.\nWallet: ${address}\nTimestamp: ${Date.now()}`
+
+      // For now, we'll skip actual signature verification and just send the address
+      // In production, you'd get a signature from the wallet
+      const signature = 'dummy_signature'
+
+      console.log('Sending wallet auth request to:', `${API_BASE}/v1/auth/wallet`)
+      const response = await fetch(`${API_BASE}/v1/auth/wallet`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          walletAddress: address,
+          signature,
+          message
+        })
+      })
+
+      console.log('Response status:', response.status)
+      const data = await response.json()
+      console.log('Response data:', data)
+
+      if (data.success) {
+        localStorage.setItem('sessionId', data.sessionId)
+        setAuth({
+          user: data.user,
+          sessionId: data.sessionId,
+          loading: false
+        })
+        setMessage(`Connected with wallet ${address.slice(0, 6)}...${address.slice(-4)}`)
+      } else {
+        console.error('Wallet auth failed:', data.error)
+        setError(data.error || 'Wallet authentication failed')
+      }
+    } catch (err) {
+      console.error('Wallet auth error:', err)
+      setError('Failed to authenticate with wallet: ' + (err instanceof Error ? err.message : 'Unknown error'))
+    }
   }
 
   const handleWalletDisconnect = () => {
@@ -457,7 +616,8 @@ export default function App() {
               </div>
             )}
 
-            <ShareCard onCreateLink={handleCreateLink} />
+            <ShareCard onCreateLink={handleCreateLink} onCreateMultipleLinks={handleCreateMultipleLinks} sessionId={auth.sessionId} />
+
 
             {/* Result Link */}
             {link && (
@@ -484,6 +644,53 @@ export default function App() {
                     className="bg-[#273244] hover:bg-[#334155] border border-[#3a465a]"
                   >
                     Open
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Multiple Result Links */}
+            {links.length > 0 && (
+              <div className="mt-6 bg-[#131A26]/50 backdrop-blur-sm border border-[#273244] rounded-2xl p-6">
+                <h3 className="text-lg font-semibold mb-4 text-[#E6EAF2]">Your links are ready ({links.length})</h3>
+                <div className="space-y-3 max-h-60 overflow-y-auto">
+                  {links.map((linkUrl, index) => (
+                    <div key={index} className="flex gap-2">
+                      <Input
+                        value={linkUrl}
+                        readOnly
+                        className="flex-1 bg-[#0B0F1A] border-[#273244] text-[#E6EAF2]"
+                      />
+                      <Button
+                        onClick={() => {
+                          navigator.clipboard?.writeText(linkUrl)
+                          setMessage(`Link ${index + 1} copied ✅`)
+                        }}
+                        className="bg-[#20C15A] hover:bg-[#1ca549]"
+                      >
+                        Copy
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() => window.open(linkUrl, '_blank')}
+                        className="bg-[#273244] hover:bg-[#334155] border border-[#3a465a]"
+                      >
+                        Open
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 pt-4 border-t border-[#273244]">
+                  <Button
+                    onClick={() => {
+                      const allLinks = links.join('\n')
+                      navigator.clipboard?.writeText(allLinks)
+                      setMessage('All links copied ✅')
+                    }}
+                    variant="secondary"
+                    className="w-full bg-[#273244] hover:bg-[#334155] border border-[#3a465a]"
+                  >
+                    Copy All Links
                   </Button>
                 </div>
               </div>

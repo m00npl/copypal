@@ -5,7 +5,7 @@ import { ExpirationPicker } from "./ExpirationPicker"
 import { Link as LinkIcon } from "lucide-react"
 
 interface TextFormProps {
-  onCreateLink: (data: { content: string; expiresAt: Date }) => Promise<void>
+  onCreateLink: (data: { content: string; expiresAt: Date }) => Promise<string | null>
 }
 
 export function TextForm({ onCreateLink }: TextFormProps) {
