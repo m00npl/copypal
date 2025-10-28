@@ -40,16 +40,16 @@ jobs:
 
       - name: Build and start services
         run: |
-          docker compose build --no-cache
-          docker compose up -d
+          docker compose -f docker-compose.ci.yml build --no-cache
+          docker compose -f docker-compose.ci.yml up -d
           echo "Waiting for services to start..."
           sleep 20
 
       - name: Check services
         run: |
-          docker compose ps
-          docker compose logs backend | tail -30
-          docker compose logs frontend | tail -30
+          docker compose -f docker-compose.ci.yml ps
+          docker compose -f docker-compose.ci.yml logs copypal-backend | tail -30
+          docker compose -f docker-compose.ci.yml logs copypal-frontend | tail -30
 
       - name: Wait for services to be ready
         run: |
@@ -95,14 +95,14 @@ jobs:
         if: failure()
         run: |
           echo "=== Backend logs ==="
-          docker compose logs backend
+          docker compose -f docker-compose.ci.yml logs copypal-backend
           echo ""
           echo "=== Frontend logs ==="
-          docker compose logs frontend
+          docker compose -f docker-compose.ci.yml logs copypal-frontend
 
       - name: Cleanup
         if: always()
-        run: docker compose down -v
+        run: docker compose -f docker-compose.ci.yml down -v
 
       - name: Comment on PR
         if: always()

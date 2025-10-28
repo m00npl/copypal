@@ -77,16 +77,16 @@ jobs:
 
       - name: Build and start services with Docker Compose
         run: |
-          docker compose build --no-cache
-          docker compose up -d --build
+          docker compose -f docker-compose.ci.yml build --no-cache
+          docker compose -f docker-compose.ci.yml up -d
           echo "Waiting for services to be ready..."
           sleep 20
 
       - name: Check services health
         run: |
-          docker compose ps
-          docker compose logs backend | tail -20
-          docker compose logs frontend | tail -20
+          docker compose -f docker-compose.ci.yml ps
+          docker compose -f docker-compose.ci.yml logs copypal-backend | tail -20
+          docker compose -f docker-compose.ci.yml logs copypal-frontend | tail -20
 
       - name: Wait for services to be ready
         run: |
@@ -124,13 +124,13 @@ jobs:
         if: failure()
         run: |
           echo "=== Backend logs ==="
-          docker compose logs backend
+          docker compose -f docker-compose.ci.yml logs copypal-backend
           echo "=== Frontend logs ==="
-          docker compose logs frontend
+          docker compose -f docker-compose.ci.yml logs copypal-frontend
 
       - name: Stop services
         if: always()
-        run: docker compose down -v
+        run: docker compose -f docker-compose.ci.yml down -v
 
       - name: Upload test results
         if: always()
