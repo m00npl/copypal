@@ -11,10 +11,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@arkiv-network/sdk": "^0.4.0",
     "@hono/node-server": "^1.12.2",
     "@sendgrid/mail": "^8.1.6",
     "@sentry/bun": "^10.22.0",
-    "arkiv-sdk": "latest",
     "hono": "^4.6.3",
     "nanoid": "^5.0.7",
     "tslib": "^2.8.1",

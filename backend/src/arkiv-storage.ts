@@ -1,8 +1,25 @@
-import { createArkivROClient, createArkivClient } from 'arkiv-sdk';
+import {
+  createPublicClient,
+  createWalletClient,
+  defineChain,
+  http,
+  type Attribute,
+  type Chain,
+  type Hex,
+  type MimeType,
+  type PublicArkivClient,
+  type WalletArkivClient,
+} from '@arkiv-network/sdk';
+import { privateKeyToAccount } from '@arkiv-network/sdk/accounts';
+import { kaolin } from '@arkiv-network/sdk/chains';
+import { NoEntityFoundError } from '@arkiv-network/sdk/query';
+import { ExpirationTime, stringToPayload } from '@arkiv-network/sdk/utils';
 import crypto from 'crypto';
 
 const toErrorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error)
+
+const BLOCK_TIME_SECONDS = 2
 
 interface StorageItem {
   kind: 'text' | 'file';
@@ -16,228 +33,306 @@ interface StorageItem {
   expiresAt: number;
 }
 
+type AttributeValue = string | number
+
+const KNOWN_MIME_TYPES: ReadonlySet<MimeType> = new Set([
+  'text/plain',
+  'text/html',
+  'text/css',
+  'text/csv',
+  'text/xml',
+  'text/javascript',
+  'application/json',
+  'application/xml',
+  'application/pdf',
+  'application/zip',
+  'application/gzip',
+  'application/octet-stream',
+  'application/javascript',
+  'application/x-www-form-urlencoded',
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/gif',
+  'image/svg+xml',
+  'audio/mpeg',
+  'audio/wav',
+  'audio/ogg',
+  'video/mp4',
+  'video/webm',
+  'video/ogg',
+  'multipart/form-data'
+])
+
 export class ArkivStorage {
-  private roClient: any;
-  private writeClient: any = null;
-  private initialized: Promise<void>;
-  private chainId: number;
-  private rpcUrl: string;
-  private wsUrl: string;
+  private publicClient: PublicArkivClient | null = null
+  private walletClient: WalletArkivClient | null = null
+  private readonly initialized: Promise<void>
+  private readonly chainId: number
+  private readonly rpcUrl: string
+  private readonly wsUrl: string
+  private readonly chain: Chain
 
   constructor() {
-    this.chainId = parseInt(process.env.ARKIV_CHAIN_ID || '60138453025');
-    this.rpcUrl = process.env.ARKIV_RPC_URL || 'https://kaolin.hoodi.arkiv.network/rpc';
-    this.wsUrl = process.env.ARKIV_WS_URL || 'wss://kaolin.hoodi.arkiv.network/rpc/ws';
+    this.chainId = parseInt(process.env.ARKIV_CHAIN_ID || '60138453025', 10)
+    this.rpcUrl = process.env.ARKIV_RPC_URL || 'https://kaolin.hoodi.arkiv.network/rpc'
+    this.wsUrl = process.env.ARKIV_WS_URL || 'wss://kaolin.hoodi.arkiv.network/rpc/ws'
+    this.chain = this.buildChain()
 
-    this.initialized = this.initializeClient();
+    this.initialized = this.initializeClients()
   }
 
-  private async initializeClient(): Promise<void> {
+  private buildChain(): Chain {
+    const defaultHttp = kaolin.rpcUrls.default.http[0]
+    const defaultWs = kaolin.rpcUrls.default.webSocket?.[0]
+
+    const usingDefaults =
+      this.chainId === kaolin.id && this.rpcUrl === defaultHttp && (!this.wsUrl || this.wsUrl === defaultWs)
+
+    if (usingDefaults) {
+      return kaolin
+    }
+
+    return defineChain({
+      id: this.chainId,
+      name: kaolin.name,
+      network: kaolin.network,
+      nativeCurrency: kaolin.nativeCurrency,
+      rpcUrls: {
+        default: {
+          http: [this.rpcUrl],
+          ...(this.wsUrl ? { webSocket: [this.wsUrl] as [string] } : {}),
+        },
+      },
+      blockExplorers: kaolin.blockExplorers,
+      testnet: kaolin.testnet,
+    })
+  }
+
+  private async initializeClients(): Promise<void> {
     try {
-      console.log('🔄 Initializing Arkiv storage...');
+      console.log('🔄 Initializing Arkiv storage...')
 
-      // Always create read-only client
-      this.roClient = createArkivROClient(this.chainId, this.rpcUrl, this.wsUrl);
-      console.log('✅ Read-only client initialized');
+      this.publicClient = createPublicClient({
+        chain: this.chain,
+        transport: http(this.rpcUrl),
+      })
+      console.log('✅ Read-only client initialized')
 
-      // Create write client if private key is available
-      const privateKey = process.env.ARKIV_PRIVATE_KEY;
+      const privateKey = process.env.ARKIV_PRIVATE_KEY
       if (privateKey) {
-        const accountData = {
-          tag: 'privatekey' as const,
-          data: Buffer.from(privateKey.slice(2), 'hex')
-        };
+        const normalizedKey = privateKey.startsWith('0x') ? privateKey : `0x${privateKey}`
+        const account = privateKeyToAccount(normalizedKey as Hex)
 
-        this.writeClient = await createArkivClient(this.chainId, accountData, this.rpcUrl, this.wsUrl);
-        console.log('✅ Write client initialized');
+        this.walletClient = createWalletClient({
+          chain: this.chain,
+          transport: http(this.rpcUrl),
+          account,
+        })
+        console.log('✅ Write client initialized')
       } else {
-        console.log('⚠️ No private key - read-only mode');
+        console.log('⚠️ No private key - read-only mode')
       }
 
-      console.log('🚀 Arkiv storage ready');
+      console.log('🚀 Arkiv storage ready')
     } catch (error) {
-      console.error('❌ Failed to initialize Arkiv storage:', error);
-      throw error;
+      console.error('❌ Failed to initialize Arkiv storage:', error)
+      throw error
     }
+  }
+
+  private getPublicClient(): PublicArkivClient {
+    if (!this.publicClient) {
+      throw new Error('Arkiv public client not ready')
+    }
+    return this.publicClient
   }
 
   private calculateChecksum(data: Buffer): string {
-    return crypto.createHash('sha256').update(data).digest('hex');
+    return crypto.createHash('sha256').update(data).digest('hex')
   }
 
-  private async getCurrentBlock(): Promise<number> {
-    try {
-      if (this.writeClient?.getRawClient) {
-        const rawClient = this.writeClient.getRawClient();
-        return await rawClient.httpClient.getBlockNumber();
-      }
-      return Math.floor(Date.now() / 1000 / 2);
-    } catch (error) {
-      const message = toErrorMessage(error);
-      console.warn('Failed to get current block; using timestamp fallback:', message);
-      return Math.floor(Date.now() / 1000 / 2);
+  private calculateExpiresInSeconds(expirationDate: Date): number {
+    const seconds = ExpirationTime.fromDate(expirationDate)
+    return Math.max(seconds, BLOCK_TIME_SECONDS)
+  }
+
+  private resolveContentType(item: StorageItem): MimeType {
+    if (item.kind === 'text') {
+      return 'text/plain'
     }
+
+    if (item.fileType && KNOWN_MIME_TYPES.has(item.fileType as MimeType)) {
+      return item.fileType as MimeType
+    }
+
+    return 'application/octet-stream'
   }
 
-  private calculateBTL(expirationDate: Date): number {
-    const currentBlock = Math.floor(Date.now() / 1000 / 2);
-    const expirationBlock = Math.floor(expirationDate.getTime() / 1000 / 2);
-    return Math.max(1, expirationBlock - currentBlock);
+  private attributesToMap(attributes: Attribute[]): Map<string, AttributeValue> {
+    return new Map(attributes.map(({ key, value }) => [key, value]))
+  }
+
+  private getStringAttribute(map: Map<string, AttributeValue>, key: string): string | undefined {
+    const value = map.get(key)
+    if (typeof value === 'string') {
+      return value
+    }
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value.toString() : undefined
+    }
+    return undefined
+  }
+
+  private getNumericAttribute(map: Map<string, AttributeValue>, key: string): number | undefined {
+    const value = map.get(key)
+    if (typeof value === 'number') {
+      return value
+    }
+    if (typeof value === 'string') {
+      const parsed = Number(value)
+      return Number.isNaN(parsed) ? undefined : parsed
+    }
+    return undefined
   }
 
   async storeItem(item: StorageItem): Promise<string> {
-    await this.initialized;
+    await this.initialized
 
-    if (!this.writeClient) {
-      throw new Error('Write operations not available - no private key configured');
+    if (!this.walletClient) {
+      throw new Error('Write operations not available - no private key configured')
     }
 
     try {
-      const id = crypto.randomBytes(16).toString('hex');
+      const id = crypto.randomBytes(16).toString('hex')
 
-      // Prepare content as buffer
-      let contentBuffer: Buffer;
-      if (item.kind === 'file' && item.fileData) {
-        contentBuffer = Buffer.from(item.fileData, 'base64');
-      } else {
-        contentBuffer = Buffer.from(item.content, 'utf8');
+      const payloadBuffer =
+        item.kind === 'file' && item.fileData
+          ? Buffer.from(item.fileData, 'base64')
+          : Buffer.from(stringToPayload(item.content))
+
+  const checksum = this.calculateChecksum(payloadBuffer)
+      const expirationDate = new Date(item.expiresAt)
+      const expiresInSeconds = this.calculateExpiresInSeconds(expirationDate)
+  const approxBtl = Math.max(1, Math.floor(expiresInSeconds / BLOCK_TIME_SECONDS))
+
+      console.log(
+        `📦 Storing ${item.kind} item, size: ${payloadBuffer.length} bytes, expires in ${expiresInSeconds}s (~BTL ${approxBtl})`,
+      )
+
+      const attributes: Attribute[] = [
+        { key: 'type', value: 'copypal_content' },
+        { key: 'item_id', value: id },
+        { key: 'kind', value: item.kind },
+        { key: 'checksum', value: checksum },
+      ]
+
+      if (item.fileName) {
+        attributes.push({ key: 'file_name', value: item.fileName })
+      }
+      if (item.fileType) {
+        attributes.push({ key: 'file_type', value: item.fileType })
+      }
+      if (item.userId) {
+        attributes.push({ key: 'user_id', value: item.userId })
+      }
+      if (typeof item.fileSize === 'number') {
+        attributes.push({ key: 'file_size', value: item.fileSize })
       }
 
-      const checksum = this.calculateChecksum(contentBuffer);
+      attributes.push({ key: 'created_at', value: item.createdAt })
+      attributes.push({ key: 'expires_at', value: item.expiresAt })
 
-      // Calculate BTL from expiration date
-      const expirationDate = new Date(item.expiresAt);
-      const btl = this.calculateBTL(expirationDate);
+      const { entityKey, txHash } = await this.walletClient.createEntity({
+        payload: payloadBuffer,
+        attributes,
+        contentType: this.resolveContentType(item),
+        expiresIn: expiresInSeconds,
+      })
 
-      console.log(`📦 Storing ${item.kind} item, size: ${contentBuffer.length} bytes, BTL: ${btl}`);
-
-      // Store content
-      const result = await this.writeClient.createEntities([{
-        btl: btl,
-        data: contentBuffer,
-        stringAnnotations: [
-          { key: 'type', value: 'copypal_content' },
-          { key: 'item_id', value: id },
-          { key: 'kind', value: item.kind },
-          { key: 'checksum', value: checksum },
-          ...(item.fileName ? [{ key: 'file_name', value: item.fileName }] : []),
-          ...(item.fileType ? [{ key: 'file_type', value: item.fileType }] : []),
-          ...(item.userId ? [{ key: 'user_id', value: item.userId }] : [])
-        ],
-        numericAnnotations: [
-          { key: 'created_at', value: item.createdAt },
-          { key: 'expires_at', value: item.expiresAt },
-          ...(item.fileSize ? [{ key: 'file_size', value: item.fileSize }] : [])
-        ]
-      }]);
-
-      const entityKey = result[0].entityKey;
-
-      console.log(`✅ Item stored with entity key: ${entityKey}`);
-      return entityKey;
-
+      console.log(`✅ Item stored with entity key: ${entityKey} (tx: ${txHash})`)
+      return entityKey
     } catch (error) {
-      console.error('❌ Failed to store item:', error);
-      throw error;
+      console.error('❌ Failed to store item:', error)
+      throw error
     }
   }
 
   async getItem(entityKey: string): Promise<StorageItem | null> {
-    await this.initialized;
+    await this.initialized
 
     try {
-      // Get metadata
-      const metadata = await this.roClient.getEntityMetaData(entityKey);
-      if (!metadata) {
-        return null;
+      const client = this.getPublicClient()
+      const entity = await client.getEntity(entityKey as Hex)
+
+      const attributesMap = this.attributesToMap(entity.attributes)
+      const entityType = this.getStringAttribute(attributesMap, 'type')
+      if (entityType !== 'copypal_content') {
+        return null
       }
 
-      // Check if it's a CopyPal item
-      const isTargetType = metadata.stringAnnotations.some(
-        (ann: any) => ann.key === 'type' && ann.value === 'copypal_content'
-      );
-
-      if (!isTargetType) {
-        return null;
+      if (!entity.payload) {
+        return null
       }
 
-      // Get content data
-      const data = await this.roClient.getStorageValue(entityKey);
-      if (!data) {
-        return null;
-      }
+      const kind = (this.getStringAttribute(attributesMap, 'kind') as 'text' | 'file') || 'text'
+      const createdAt = this.getNumericAttribute(attributesMap, 'created_at') ?? Date.now()
+      const expiresAt =
+        this.getNumericAttribute(attributesMap, 'expires_at') ?? Date.now() + 24 * 60 * 60 * 1000
 
-      // Parse annotations
-      const getStringAnnotation = (key: string): string | undefined => {
-        return metadata.stringAnnotations.find((ann: any) => ann.key === key)?.value;
-      };
-
-      const getNumericAnnotation = (key: string): number | undefined => {
-        const value = metadata.numericAnnotations.find((ann: any) => ann.key === key)?.value;
-        return value ? Number(value) : undefined;
-      };
-
-      const kind = getStringAnnotation('kind') as 'text' | 'file' || 'text';
-      const createdAt = getNumericAnnotation('created_at') || Date.now();
-      const expiresAt = getNumericAnnotation('expires_at') || Date.now() + 24 * 60 * 60 * 1000;
-
-      // Check if expired
       if (Date.now() > expiresAt) {
-        return null;
+        return null
       }
 
-      // Build result
+      const payloadBuffer = Buffer.from(entity.payload)
+      const base64Data = payloadBuffer.toString('base64')
+
       const result: StorageItem = {
         kind,
-        content: kind === 'text' ? data.toString('utf8') : data.toString('base64'),
-        fileName: getStringAnnotation('file_name'),
-        fileType: getStringAnnotation('file_type'),
-        fileSize: getNumericAnnotation('file_size'),
-        fileData: kind === 'file' ? data.toString('base64') : undefined,
-        userId: getStringAnnotation('user_id'),
+        content: kind === 'text' ? payloadBuffer.toString('utf8') : base64Data,
+        fileName: this.getStringAttribute(attributesMap, 'file_name'),
+        fileType: this.getStringAttribute(attributesMap, 'file_type'),
+        fileSize: this.getNumericAttribute(attributesMap, 'file_size'),
+        fileData: kind === 'file' ? base64Data : undefined,
+        userId: this.getStringAttribute(attributesMap, 'user_id'),
         createdAt,
-        expiresAt
-      };
+        expiresAt,
+      }
 
-      return result;
-
+      return result
     } catch (error) {
-      console.error('❌ Failed to get item:', error);
-      return null;
+      if (error instanceof NoEntityFoundError) {
+        return null
+      }
+
+      console.error('❌ Failed to get item:', error)
+      return null
     }
   }
 
   async getUserItems(userId: string): Promise<Array<{ entityKey: string; item: StorageItem }>> {
-    await this.initialized;
+    await this.initialized
 
     try {
-      // For now, we'll need to get all entities and filter
-      // This is not optimal but Arkiv doesn't have efficient querying yet
-      console.log(`🔍 Querying items for user: ${userId}`);
-
-      // This would require knowing the owner address
-      // For now, return empty array as we can't efficiently query by user
-      console.log('⚠️ User-specific queries not yet implemented - requires owner address mapping');
-      return [];
-
+      console.log(`🔍 Querying items for user: ${userId}`)
+      console.log('⚠️ User-specific queries not yet implemented - requires owner address mapping')
+      return []
     } catch (error) {
-      console.error('❌ Failed to get user items:', error);
-      return [];
+      console.error('❌ Failed to get user items:', error)
+      return []
     }
   }
 
   async healthCheck(): Promise<{ status: string; details: any }> {
-    await this.initialized;
+    await this.initialized
 
     try {
-      // Test read operations
-      const entityCount = await this.roClient.getEntityCount();
+      const client = this.getPublicClient()
+      const entityCount = await client.getEntityCount()
 
-      let writeTest = null;
-      if (this.writeClient) {
-        const ownerAddress = await this.writeClient.getOwnerAddress();
-        writeTest = { ownerAddress };
-      }
+      const writeTest = this.walletClient?.account
+        ? { ownerAddress: this.walletClient.account.address }
+        : null
 
       return {
         status: 'ok',
@@ -245,19 +340,17 @@ export class ArkivStorage {
           chainId: this.chainId,
           rpcUrl: this.rpcUrl,
           entityCount: entityCount.toString(),
-          writeEnabled: !!this.writeClient,
-          writeTest
-        }
-      };
-
+          writeEnabled: !!this.walletClient,
+          writeTest,
+        },
+      }
     } catch (error) {
       return {
         status: 'error',
-        details: { error: toErrorMessage(error) }
-      };
+        details: { error: toErrorMessage(error) },
+      }
     }
   }
 }
 
-// Export singleton instance
-export const arkivStorage = new ArkivStorage();
+export const arkivStorage = new ArkivStorage()
