@@ -143,8 +143,8 @@ jobs:
             docker compose up -d --no-deps copypal-backend copypal-frontend
             sleep 30
 
-            # Cleanup old images
-            docker image prune -f
+            # Cleanup old images (ignore if already running)
+            docker image prune -f || true
           '
 
       - name: Post-deployment verification
